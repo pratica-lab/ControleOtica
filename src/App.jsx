@@ -98,6 +98,14 @@ export default function App() {
     observacao: ''
   });
 
+  // --- Configuração de Ordenação da Tabela Lançamentos ---
+  const [sortConfig, setSortConfig] = useState({ key: 'dueDate', direction: 'asc' });
+
+  // --- DEFINIÇÃO DO IDIOMA PARA PT-BR (Evita Google Tradutor) ---
+  useEffect(() => {
+    document.documentElement.lang = 'pt-BR';
+  }, []);
+
   // --- 1. FIREBASE AUTH & SUBSCRIPTIONS ---
   useEffect(() => {
     const initAuth = async () => {
@@ -439,6 +447,15 @@ export default function App() {
     saveDoc('settings', 'metas', configMetas);
   };
 
+  // --- Funções de Ordenação (Lançamentos) ---
+  const requestSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
   // --- Utilitários Formatação ---
   const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
   const formatDate = (dateString) => {
@@ -473,6 +490,33 @@ export default function App() {
     if (filtros.dataFim) filtrados = filtrados.filter(inst => inst.dueDate <= filtros.dataFim);
     return filtrados;
   }, [lancamentosDaLoja, filtros]);
+
+  // Aplica a ordenação configurada aos dados filtrados
+  const lancamentosFiltradosEOrdenados = useMemo(() => {
+    let sortableItems = [...lancamentosFiltrados];
+    if (sortConfig.key) {
+      sortableItems.sort((a, b) => {
+        let aValue = a[sortConfig.key];
+        let bValue = b[sortConfig.key];
+
+        // Se for valor (numérico)
+        if (sortConfig.key === 'amount') {
+          aValue = parseFloat(aValue || 0);
+          bValue = parseFloat(bValue || 0);
+          return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue;
+        }
+
+        // Para textos e datas (ISO string YYYY-MM-DD permite ordenação alfabética correta)
+        aValue = String(aValue || '').toLowerCase();
+        bValue = String(bValue || '').toLowerCase();
+
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [lancamentosFiltrados, sortConfig]);
 
   const lojaSelecionadaNome = lojas.find(l => l.id === lojaSelecionadaId)?.nome || 'Sem Loja Ativa';
   const overdueCount = useMemo(() => lancamentosDaLoja.filter(i => getDisplayStatus(i) === 'Vencido').length, [lancamentosDaLoja]);
@@ -683,8 +727,11 @@ export default function App() {
           margin:       10,
           filename:     `Relatorio_${relatorioTipo}_${getTodayStr()}_${Date.now()}.pdf`,
           image:        { type: 'jpeg', quality: 0.98 },
-          html2canvas:  { scale: 2, useCORS: true, logging: false },
-          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' }
+          // A propriedade scrollY em 0 evita que ele corte se o usuário estiver no meio da tela
+          html2canvas:  { scale: 2, useCORS: true, logging: false, scrollY: 0 },
+          jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' },
+          // A propriedade 'avoid: tr' garante que a tabela não quebre linhas pela metade ao mudar de página
+          pagebreak:    { mode: 'css', avoid: 'tr' }
         };
 
         await window.html2pdf().set(opt).from(element).save();
@@ -1036,7 +1083,7 @@ service cloud.firestore {
                         <button type="button" onClick={exportarBackupCSV} className="text-xs bg-slate-800 hover:bg-slate-900 text-white font-medium px-3 py-1.5 rounded-lg flex items-center gap-2 transition-colors" title="Exportar Backup de Lançamentos (Excel)">
                           <Download className="w-3 h-3" /> Backup Geral (CSV)
                         </button>
-                        <span className="text-xs font-bold bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full">{lancamentosFiltrados.length} registos</span>
+                        <span className="text-xs font-bold bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full">{lancamentosFiltradosEOrdenados.length} registos</span>
                       </div>
                     </div>
 
@@ -1085,23 +1132,35 @@ service cloud.firestore {
                   )}
                   
                   <div className="overflow-x-auto flex-1 bg-white">
-                    {lancamentosFiltrados.length > 0 ? (
+                    {lancamentosFiltradosEOrdenados.length > 0 ? (
                       <table className="w-full min-w-[900px] text-sm text-left text-slate-600">
                         <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
                           <tr>
                             <th className="px-3 py-3 w-10"><input type="checkbox" checked={todosSelecionados} onChange={toggleSelectAll} className="w-4 h-4 rounded" disabled={numItensSelecionaveis === 0} /></th>
-                            <th className="px-3 py-3">Tipo / Entidade</th>
-                            <th className="px-3 py-3">Nota/Emissão</th>
-                            <th className="px-3 py-3 text-center">Parc.</th>
-                            <th className="px-3 py-3">Vencimento</th>
-                            <th className="px-3 py-3 text-right">Valor</th>
+                            <th className="px-3 py-3 cursor-pointer select-none hover:bg-slate-200 transition-colors" onClick={() => requestSort('entidadeNome')}>
+                              Tipo / Entidade {sortConfig.key === 'entidadeNome' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th className="px-3 py-3 cursor-pointer select-none hover:bg-slate-200 transition-colors" onClick={() => requestSort('numeroFechamento')}>
+                              Nota/Emissão {sortConfig.key === 'numeroFechamento' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th className="px-3 py-3 text-center cursor-pointer select-none hover:bg-slate-200 transition-colors" onClick={() => requestSort('parcelaStr')}>
+                              Parc. {sortConfig.key === 'parcelaStr' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th className="px-3 py-3 cursor-pointer select-none hover:bg-slate-200 transition-colors" onClick={() => requestSort('dueDate')}>
+                              Vencimento {sortConfig.key === 'dueDate' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th className="px-3 py-3 text-right cursor-pointer select-none hover:bg-slate-200 transition-colors" onClick={() => requestSort('amount')}>
+                              Valor {sortConfig.key === 'amount' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
                             <th className="px-3 py-3">Obs</th>
-                            <th className="px-3 py-3 text-center">Estado</th>
+                            <th className="px-3 py-3 text-center cursor-pointer select-none hover:bg-slate-200 transition-colors" onClick={() => requestSort('status')}>
+                              Estado {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                            </th>
                             <th className="px-3 py-3 text-center">Ações</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {lancamentosFiltrados.map((inst) => {
+                          {lancamentosFiltradosEOrdenados.map((inst) => {
                             const dispStatus = getDisplayStatus(inst);
                             return (
                             <tr key={inst.id} className="hover:bg-slate-50">
@@ -1439,7 +1498,7 @@ service cloud.firestore {
                     </thead>
                     <tbody className="divide-y divide-slate-100 print:divide-slate-200">
                       {dadosRelatorio.length > 0 ? dadosRelatorio.map(item => (
-                        <tr key={item.id}>
+                        <tr key={item.id} className="break-inside-avoid">
                           <td className="px-4 py-3 font-medium text-slate-800">{item.tipoCusto === 'laboratorio' ? 'Lab' : item.tipoCusto === 'armacao' ? 'Armação' : 'Outros'} - {item.entidadeNome}</td>
                           <td className="px-4 py-3">{item.numeroFechamento} <span className="text-xs text-slate-400 block">Emissão: {formatDate(item.dataEmissao)}</span></td>
                           <td className="px-4 py-3 text-center">{item.parcelaStr}</td>
@@ -1450,7 +1509,7 @@ service cloud.firestore {
                         </tr>
                       )) : <tr><td colSpan="7" className="p-8 text-center text-slate-400">Nenhum dado encontrado neste período.</td></tr>}
                       {dadosRelatorio.length > 0 && (
-                        <tr className="bg-slate-50 font-bold print:bg-transparent print:border-t-2 print:border-slate-800">
+                        <tr className="bg-slate-50 font-bold print:bg-transparent print:border-t-2 print:border-slate-800 break-inside-avoid">
                           <td colSpan={(relatorioTipo === 'pagas' || relatorioTipo === 'todos') ? 5 : 4} className="px-4 py-4 text-right">TOTAL {relatorioTipo === 'pagas' ? 'PAGO' : relatorioTipo === 'todos' ? 'GERAL' : 'A PAGAR'} NO PERÍODO:</td>
                           <td className="px-4 py-4 text-right text-lg">{formatCurrency(dadosRelatorio.reduce((acc, curr) => acc + curr.amount, 0))}</td>
                           <td></td>
@@ -1474,7 +1533,7 @@ service cloud.firestore {
                     </thead>
                     <tbody className="divide-y divide-slate-100 print:divide-slate-200">
                       {dadosRelatorio.length > 0 ? dadosRelatorio.map(res => (
-                        <tr key={res.mes}>
+                        <tr key={res.mes} className="break-inside-avoid">
                           <td className="px-4 py-3 font-bold">{formatMonth(res.mes)}</td>
                           <td className="px-4 py-3 text-right">{formatCurrency(res.valorVendaInfo)}</td>
                           <td className="px-4 py-3 text-right font-bold text-green-700">{formatCurrency(res.faturamento)}</td>
