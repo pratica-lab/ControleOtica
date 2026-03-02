@@ -78,6 +78,10 @@ export default function App() {
   const [filtros, setFiltros] = useState({ tipoCusto: '', entidadeId: '', dataInicio: '', dataFim: '', status: '' });
   const [filtroResumoTipo, setFiltroResumoTipo] = useState('');
 
+  const [termoBusca, setTermoBusca] = useState('');
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const itensPorPagina = 20;
+
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({ dueDate: '', amount: '', observacao: '' });
   
@@ -488,8 +492,21 @@ export default function App() {
     }
     if (filtros.dataInicio) filtrados = filtrados.filter(inst => inst.dueDate >= filtros.dataInicio);
     if (filtros.dataFim) filtrados = filtrados.filter(inst => inst.dueDate <= filtros.dataFim);
+    
+    if (termoBusca.trim() !== '') {
+      const termo = termoBusca.toLowerCase();
+      filtrados = filtrados.filter(inst => {
+        const obs = (inst.observacao || '').toLowerCase();
+        const numFech = (inst.numeroFechamento || '').toLowerCase();
+        const venciBR = formatDate(inst.dueDate).toLowerCase();
+        const emissBR = formatDate(inst.dataEmissao || inst.dueDate).toLowerCase();
+        
+        return obs.includes(termo) || numFech.includes(termo) || venciBR.includes(termo) || emissBR.includes(termo);
+      });
+    }
+
     return filtrados;
-  }, [lancamentosDaLoja, filtros]);
+  }, [lancamentosDaLoja, filtros, termoBusca]);
 
   // Aplica a ordenação configurada aos dados filtrados
   const lancamentosFiltradosEOrdenados = useMemo(() => {
@@ -517,6 +534,16 @@ export default function App() {
     }
     return sortableItems;
   }, [lancamentosFiltrados, sortConfig]);
+
+  // Reseta a paginação sempre que um filtro ou ordenação mudar
+  useEffect(() => {
+    setPaginaAtual(1);
+  }, [filtros, termoBusca, sortConfig]);
+
+  const indiceUltimoItem = paginaAtual * itensPorPagina;
+  const indicePrimeiroItem = indiceUltimoItem - itensPorPagina;
+  const lancamentosPaginados = lancamentosFiltradosEOrdenados.slice(indicePrimeiroItem, indiceUltimoItem);
+  const totalPaginas = Math.ceil(lancamentosFiltradosEOrdenados.length / itensPorPagina);
 
   const lojaSelecionadaNome = lojas.find(l => l.id === lojaSelecionadaId)?.nome || 'Sem Loja Ativa';
   const overdueCount = useMemo(() => lancamentosDaLoja.filter(i => getDisplayStatus(i) === 'Vencido').length, [lancamentosDaLoja]);
@@ -1088,6 +1115,9 @@ service cloud.firestore {
                     </div>
 
                     {/* Filtros */}
+                    <div className="mb-3">
+                      <input type="text" placeholder="Busca rápida por observação, nº nota ou data (Ex: 15/05/2024)..." value={termoBusca} onChange={(e) => setTermoBusca(e.target.value)} className="w-full text-xs py-2 px-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
+                    </div>
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-slate-500 mb-1">Tipo</label>
@@ -1119,7 +1149,7 @@ service cloud.firestore {
                       </div>
                       <div className="flex items-end gap-2">
                         <input type="date" value={filtros.dataFim} onChange={(e) => setFiltros(prev => ({...prev, dataFim: e.target.value}))} className="w-full text-xs py-2 px-2 border border-slate-300 rounded-lg" />
-                        <button onClick={() => setFiltros({tipoCusto: '', entidadeId: '', dataInicio: '', dataFim: '', status: ''})} className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-100 rounded-lg" title="Limpar Filtros"><X className="w-4 h-4" /></button>
+                        <button onClick={() => { setFiltros({tipoCusto: '', entidadeId: '', dataInicio: '', dataFim: '', status: ''}); setTermoBusca(''); }} className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-100 rounded-lg" title="Limpar Filtros"><X className="w-4 h-4" /></button>
                       </div>
                     </div>
                   </div>
@@ -1160,7 +1190,7 @@ service cloud.firestore {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {lancamentosFiltradosEOrdenados.map((inst) => {
+                          {lancamentosPaginados.map((inst) => {
                             const dispStatus = getDisplayStatus(inst);
                             return (
                             <tr key={inst.id} className="hover:bg-slate-50">
@@ -1218,6 +1248,35 @@ service cloud.firestore {
                       <div className="flex flex-col items-center justify-center h-64 text-slate-400"><Receipt className="w-12 h-12 mb-3 text-slate-300" /><p className="font-medium text-slate-500">Nenhum lançamento encontrado.</p></div>
                     )}
                   </div>
+
+                  {/* Controles de Paginação */}
+                  {totalPaginas > 1 && (
+                    <div className="p-4 border-t border-slate-200 flex items-center justify-between bg-slate-50">
+                      <span className="text-xs text-slate-500">
+                        Mostrando {indicePrimeiroItem + 1} a {Math.min(indiceUltimoItem, lancamentosFiltradosEOrdenados.length)} de {lancamentosFiltradosEOrdenados.length} registos
+                      </span>
+                      <div className="flex gap-1">
+                        <button 
+                          onClick={() => setPaginaAtual(prev => Math.max(prev - 1, 1))}
+                          disabled={paginaAtual === 1}
+                          className="px-3 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded-lg hover:bg-slate-100 disabled:opacity-50 text-slate-600 transition-colors"
+                        >
+                          Anterior
+                        </button>
+                        <span className="px-3 py-1.5 text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg flex items-center">
+                          Página {paginaAtual} de {totalPaginas}
+                        </span>
+                        <button 
+                          onClick={() => setPaginaAtual(prev => Math.min(prev + 1, totalPaginas))}
+                          disabled={paginaAtual === totalPaginas}
+                          className="px-3 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded-lg hover:bg-slate-100 disabled:opacity-50 text-slate-600 transition-colors"
+                        >
+                          Próxima
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               </div>
             </div>
