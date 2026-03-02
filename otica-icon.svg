@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Fundo arredondado (Índigo do seu sistema) -->
+  <rect width="512" height="512" rx="112" fill="#4F46E5"/>
+  
+  <!-- Papel do Boleto -->
+  <path d="M160 80h144l96 96v224a32 32 0 01-32 32H160a32 32 0 01-32-32V112a32 32 0 0132-32z" fill="#F8FAFC"/>
+  
+  <!-- Dobra do papel -->
+  <path d="M304 80v96h96" fill="#E2E8F0"/>
+  
+  <!-- Código de Barras (Boleto) -->
+  <rect x="176" y="320" width="16" height="64" fill="#475569" rx="4"/>
+  <rect x="208" y="320" width="32" height="64" fill="#475569" rx="4"/>
+  <rect x="256" y="320" width="16" height="64" fill="#475569" rx="4"/>
+  <rect x="288" y="320" width="48" height="64" fill="#475569" rx="4"/>
+  <rect x="352" y="320" width="16" height="64" fill="#475569" rx="4"/>
+  
+  <!-- Óculos -->
+  <!-- Haste Esquerda -->
+  <path d="M 164 224 L 100 190" fill="none" stroke="#0F172A" stroke-width="28" stroke-linecap="round"/>
+  <!-- Haste Direita -->
+  <path d="M 396 224 L 460 190" fill="none" stroke="#0F172A" stroke-width="28" stroke-linecap="round"/>
+  
+  <!-- Lente Esquerda -->
+  <circle cx="208" cy="224" r="44" fill="#FFFFFF" stroke="#0F172A" stroke-width="28"/>
+  <!-- Lente Direita -->
+  <circle cx="352" cy="224" r="44" fill="#FFFFFF" stroke="#0F172A" stroke-width="28"/>
+  
+  <!-- Ponte do nariz -->
+  <path d="M 252 224 Q 280 190 308 224" fill="none" stroke="#0F172A" stroke-width="28" stroke-linecap="round"/>
+</svg>
